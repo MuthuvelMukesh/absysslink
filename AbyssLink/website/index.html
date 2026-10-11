@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AbyssLink - Smart Submarine Cable Protection Dashboard</title>
+  <meta name="description" content="Industrial hardware monitoring dashboard for AbyssLink submarine cable protection and laser data transmission system.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Notification / Compatibility Banner -->
+  <div id="unsupportedBanner" class="alert-banner hidden" role="alert">
+    <div class="banner-content">
+      <svg class="banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div>
+        <strong>Web Serial API Unsupported:</strong> This browser does not support native USB Serial. Please open AbyssLink in a modern desktop Chromium browser such as Google Chrome or Microsoft Edge.
+      </div>
+    </div>
+  </div>
+
+  <div class="app-layout">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon-wrapper">
+          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 12h5l2-7 4 14 3-7h6"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">AbyssLink</h1>
+          <p class="brand-subtitle">Submarine Cable Protection and Transmission Monitoring</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="connection-status-group">
+          <span class="status-indicator-dot disconnected" id="connectionIndicatorDot"></span>
+          <span class="connection-status-text" id="connectionStatusLabel">DISCONNECTED</span>
+        </div>
+
+        <div class="header-actions">
+          <button id="connectBtn" class="btn btn-primary" type="button">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 11V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v7"/>
+              <path d="M4 11h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4v3a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-3H4a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2z"/>
+            </svg>
+            Connect Device
+          </button>
+          <button id="disconnectBtn" class="btn btn-secondary" type="button" disabled>
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Disconnect
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <main class="dashboard-main">
+
+      <!-- Section: System Health & Command Controls -->
+      <section class="top-row-grid">
+
+        <!-- Card: Transmission Control -->
+        <div class="card card-control" id="transmissionControlCard">
+          <div class="card-header">
+            <div class="card-header-left">
+              <h2 class="card-title">Laser Transmission Channel</h2>
+              <span class="card-caption">Optical Data Simulation & Control</span>
+            </div>
+            <span class="badge badge-neutral" id="transmissionBadge">INACTIVE</span>
+          </div>
+
+          <div class="card-body">
+            <div class="telemetry-metric-row">
+              <div class="metric-item">
+                <span class="metric-label">Channel Status</span>
+                <span class="metric-value-lg" id="transmissionStatusVal">DISCONNECTED</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Laser Hardware</span>
+                <span class="metric-badge-box" id="laserStateBox">
+                  <span class="indicator-dot-sm off" id="laserDot"></span>
+                  <span id="laserStateLabel">OFF</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="control-actions">
+              <button id="startTransmissionBtn" class="btn btn-action-start" type="button" disabled>
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                Start Sending Data
+              </button>
+              <button id="stopTransmissionBtn" class="btn btn-action-stop" type="button" disabled>
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="6" width="12" height="12"/>
+                </svg>
+                Stop Sending Data
+              </button>
+            </div>
+
+            <div id="commandPendingMessage" class="command-status hidden">
+              <span class="spinner-small"></span>
+              <span id="commandPendingText">Sending command to ESP32...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: System Status -->
+        <div class="card card-status" id="systemStatusCard">
+          <div class="card-header">
+            <div class="card-header-left">
+              <h2 class="card-title">System Status Overview</h2>
+              <span class="card-caption">Hardware link & monitoring state</span>
+            </div>
+            <span class="badge badge-neutral" id="systemHealthBadge">DISCONNECTED</span>
+          </div>
+
+          <div class="card-body">
+            <div class="status-grid">
+              <div class="status-item">
+                <span class="status-sublabel">USB Serial Link</span>
+                <span class="status-subval" id="sysSerialLinkVal">Disconnected</span>
+              </div>
+              <div class="status-item">
+                <span class="status-sublabel">Telemetry Stream</span>
+                <span class="status-subval" id="sysDataStreamVal">Idle</span>
+              </div>
+              <div class="status-item">
+                <span class="status-sublabel">Update Frequency</span>
+                <span class="status-subval" id="sysUpdateRateVal">~300 ms</span>
+              </div>
+              <div class="status-item">
+                <span class="status-sublabel">Last Update</span>
+                <span class="status-subval mono" id="sysLastUpdateVal">--:--:--</span>
+              </div>
+            </div>
+
+            <div class="system-summary-strip" id="systemSummaryStrip">
+              <span class="strip-label">Global Condition:</span>
+              <span class="strip-value" id="globalConditionText">System awaiting hardware connection via USB serial port.</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Section: Four Discrete Sensor Cards -->
+      <section class="sensor-cards-grid">
+
+        <!-- Card 1: Laser Receiver (LDR) -->
+        <div class="card sensor-card" id="cardLaserReceiver">
+          <div class="card-header">
+            <div class="card-header-left">
+              <span class="sensor-tag">OPTICAL RECEIVER</span>
+              <h2 class="card-title">Laser Signal (LDR)</h2>
+            </div>
+            <span class="badge badge-neutral" id="ldrStatusBadge">INACTIVE</span>
+          </div>
+          <div class="card-body">
+            <div class="reading-display">
+              <span class="reading-value mono" id="ldrDigitalVal">--</span>
+              <span class="reading-unit">DIGITAL LOGIC</span>
+            </div>
+            <div class="sensor-details">
+              <div class="detail-row">
+                <span class="detail-name">Optical Detection</span>
+                <span class="detail-val" id="ldrSignalStateText">TRANSMISSION INACTIVE</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">Interruption Alarm</span>
+                <span class="detail-val" id="ldrAlarmStateText">Disarmed (Laser Off)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Ultrasonic Distance -->
+        <div class="card sensor-card" id="cardUltrasonic">
+          <div class="card-header">
+            <div class="card-header-left">
+              <span class="sensor-tag">PROXIMITY RADAR</span>
+              <h2 class="card-title">Ultrasonic Distance</h2>
+            </div>
+            <span class="badge badge-neutral" id="distanceStatusBadge">--</span>
+          </div>
+          <div class="card-body">
+            <div class="reading-display">
+              <span class="reading-value mono" id="distanceVal">--</span>
+              <span class="reading-unit" id="distanceUnitLabel">cm</span>
+            </div>
+            <div class="sensor-details">
+              <div class="detail-row">
+                <span class="detail-name">Echo Pulse Validity</span>
+                <span class="detail-val" id="distanceEchoText">Unavailable</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">Threshold Level</span>
+                <span class="detail-val" id="distanceZoneText">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Vibration Monitoring -->
+        <div class="card sensor-card" id="cardVibration">
+          <div class="card-header">
+            <div class="card-header-left">
+              <span class="sensor-tag">SEISMIC / PHYSICAL</span>
+              <h2 class="card-title">Vibration Sensor</h2>
+            </div>
+            <span class="badge badge-neutral" id="vibrationStatusBadge">--</span>
+          </div>
+          <div class="card-body">
+            <div class="reading-display">
+              <span class="reading-value mono" id="vibrationDigitalVal">--</span>
+              <span class="reading-unit">DIGITAL LOGIC</span>
+            </div>
+            <div class="sensor-details">
+              <div class="detail-row">
+                <span class="detail-name">Physical State</span>
+                <span class="detail-val" id="vibrationStateText">NORMAL</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">Continuous Alarm</span>
+                <span class="detail-val" id="vibrationAlarmText">Inactive</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Buzzer Alarm -->
+        <div class="card sensor-card" id="cardBuzzer">
+          <div class="card-header">
+            <div class="card-header-left">
+              <span class="sensor-tag">ACOUSTIC DEFENSE</span>
+              <h2 class="card-title">Buzzer Alarm State</h2>
+            </div>
+            <span class="badge badge-neutral" id="buzzerStatusBadge">OFF</span>
+          </div>
+          <div class="card-body">
+            <div class="reading-display">
+              <span class="reading-value" id="buzzerStateVal">OFF</span>
+              <span class="reading-unit">HARDWARE SOUNDER</span>
+            </div>
+            <div class="sensor-details">
+              <div class="detail-row">
+                <span class="detail-name">Active Alarm Source</span>
+                <span class="detail-val" id="buzzerSourceText">No active alert</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-name">Cadence Mode</span>
+                <span class="detail-val" id="buzzerModeText">Silent</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Section: Live Event Log -->
+      <section class="card event-log-card">
+        <div class="card-header">
+          <div class="card-header-left">
+            <h2 class="card-title">Hardware Telemetry & Transition Event Log</h2>
+            <span class="card-caption">Chronological transition journal (Max 50 memory events)</span>
+          </div>
+          <div class="log-actions">
+            <span class="event-count-badge" id="eventCountBadge">0 events</span>
+            <button id="clearLogBtn" class="btn btn-sm btn-subtle" type="button">Clear Log</button>
+          </div>
+        </div>
+
+        <div class="log-table-container">
+          <table class="log-table" id="logTable">
+            <thead>
+              <tr>
+                <th scope="col" style="width: 140px;">Timestamp</th>
+                <th scope="col" style="width: 130px;">Category</th>
+                <th scope="col">Event Description</th>
+                <th scope="col" style="width: 130px;">System Impact</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody">
+              <tr class="log-empty-row" id="emptyLogRow">
+                <td colspan="4">No hardware events logged yet. Connect ESP32 device to begin monitoring.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span>AbyssLink Hardware Submarine Protection System</span>
+        <span class="separator">|</span>
+        <span>ESP32 Firmware Protocol v1.0</span>
+      </div>
+      <div class="footer-right">
+        <span>Baud: 115200</span>
+        <span class="separator">|</span>
+        <span>Native Web Serial</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
