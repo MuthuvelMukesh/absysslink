@@ -63,12 +63,70 @@
             </svg>
             Disconnect
           </button>
+          <button id="resetEspBtn" class="btn btn-secondary btn-sm" type="button" disabled title="Reboot ESP32 hardware via RTS pulse">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Reboot ESP32
+          </button>
         </div>
       </div>
     </header>
 
     <!-- Main Dashboard Grid -->
     <main class="dashboard-main">
+
+      <!-- Connection Failure Diagnostic Guide Banner -->
+      <div id="connectionTroubleshootBanner" class="troubleshoot-banner hidden" role="alert">
+        <div class="troubleshoot-header">
+          <div class="troubleshoot-title">
+            <svg class="troubleshoot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span id="troubleshootTitleText">Serial Port Access Denied / Device Busy</span>
+          </div>
+          <button id="dismissTroubleshootBtn" class="btn-dismiss" type="button" aria-label="Dismiss">&times;</button>
+        </div>
+        <div class="troubleshoot-body">
+          <p id="troubleshootErrorDetail" class="troubleshoot-detail">The browser could not open the USB serial port because it is in use by another application.</p>
+          <div class="troubleshoot-steps">
+            <div class="step-card">
+              <span class="step-num">1</span>
+              <div>
+                <strong>Close Arduino IDE Serial Monitor</strong>
+                <p>Windows only allows one application to use a COM port at a time. If the Arduino IDE Serial Monitor or Plotter is open, close it completely.</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <span class="step-num">2</span>
+              <div>
+                <strong>Close Other Browser Tabs</strong>
+                <p>Ensure no other browser tab or web serial application is connected to the ESP32.</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <span class="step-num">3</span>
+              <div>
+                <strong>Unplug & Reconnect USB Cable</strong>
+                <p>Unplug the ESP32 USB cable, wait 3 seconds, plug it back in, and click <em>Connect Device</em> again.</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <span class="step-num">4</span>
+              <div>
+                <strong>Verify Firmware Upload</strong>
+                <p>Ensure <code>AbyssLink_ESP32.ino</code> is uploaded to the ESP32 and baud rate is 115200.</p>
+              </div>
+            </div>
+          </div>
+          <div class="troubleshoot-actions">
+            <button id="retryConnectBtn" class="btn btn-primary" type="button">Try Connecting Again</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Section: System Health & Command Controls -->
       <section class="top-row-grid">

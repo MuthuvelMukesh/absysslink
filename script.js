@@ -117,7 +117,14 @@
     eventCountBadge: document.getElementById('eventCountBadge'),
     clearLogBtn: document.getElementById('clearLogBtn'),
     logTableBody: document.getElementById('logTableBody'),
-    emptyLogRow: document.getElementById('emptyLogRow')
+    emptyLogRow: document.getElementById('emptyLogRow'),
+
+    // Troubleshooting Diagnostic Elements & Hardware Controls
+    resetEspBtn: document.getElementById('resetEspBtn'),
+    connectionTroubleshootBanner: document.getElementById('connectionTroubleshootBanner'),
+    dismissTroubleshootBtn: document.getElementById('dismissTroubleshootBtn'),
+    retryConnectBtn: document.getElementById('retryConnectBtn'),
+    troubleshootErrorDetail: document.getElementById('troubleshootErrorDetail')
   };
 
   // --------------------------------------------------------------------------
@@ -140,6 +147,20 @@
     dom.stopTransmissionBtn.addEventListener('click', handleStopTransmissionClick);
     dom.clearLogBtn.addEventListener('click', clearLog);
 
+    if (dom.dismissTroubleshootBtn) {
+      dom.dismissTroubleshootBtn.addEventListener('click', () => {
+        if (dom.connectionTroubleshootBanner) dom.connectionTroubleshootBanner.classList.add('hidden');
+      });
+    }
+
+    if (dom.retryConnectBtn) {
+      dom.retryConnectBtn.addEventListener('click', handleConnectClick);
+    }
+
+    if (dom.resetEspBtn) {
+      dom.resetEspBtn.addEventListener('click', handleResetEspClick);
+    }
+
     // 3. Listen for native USB port disconnect events
     navigator.serial.addEventListener('disconnect', (event) => {
       if (state.port && event.target === state.port) {
@@ -161,6 +182,11 @@
   async function handleConnectClick() {
     if (!state.isSerialSupported) return;
 
+    // Hide any previous troubleshooting banner
+    if (dom.connectionTroubleshootBanner) {
+      dom.connectionTroubleshootBanner.classList.add('hidden');
+    }
+
     try {
       setConnectionUI('CONNECTING', 'REQUESTING PORT...');
       addEvent('SERIAL', 'Requesting serial port selection from user.', 'info');
@@ -169,7 +195,23 @@
       state.port = await navigator.serial.requestPort();
 
       setConnectionUI('CONNECTING', 'OPENING PORT (115200)...');
-      await state.port.open({ baudRate: 115200 });
+      await state.port.open({
+        baudRate: 115200,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none',
+        bufferSize: 8192,
+        flowControl: 'none'
+      });
+
+      // Clear DTR and RTS so ESP32 is released from bootloader / reset
+      if (state.port.setSignals) {
+        try {
+          await state.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+        } catch (sigErr) {
+          console.warn('Unable to set DTR/RTS signals:', sigErr);
+        }
+      }
 
       state.connectionState = 'CONNECTED';
       state.keepReading = true;
@@ -179,6 +221,7 @@
       setConnectionUI('CONNECTED', 'CONNECTED');
       dom.connectBtn.disabled = true;
       dom.disconnectBtn.disabled = false;
+      if (dom.resetEspBtn) dom.resetEspBtn.disabled = false;
       dom.startTransmissionBtn.disabled = false;
       dom.stopTransmissionBtn.disabled = true;
 
@@ -197,14 +240,55 @@
         setConnectionUI('DISCONNECTED', 'DISCONNECTED');
         dom.connectBtn.disabled = false;
         dom.disconnectBtn.disabled = true;
+        if (dom.resetEspBtn) dom.resetEspBtn.disabled = true;
         addEvent('SERIAL', 'Port selection cancelled by user.', 'info');
       } else {
         console.error('Serial connection error:', err);
         setConnectionUI('ERROR', 'CONNECTION FAILED');
         dom.connectBtn.disabled = false;
         dom.disconnectBtn.disabled = true;
+        if (dom.resetEspBtn) dom.resetEspBtn.disabled = true;
+
+        showTroubleshootBanner(err);
         addEvent('SERIAL', `Failed to open serial port: ${err.message}`, 'danger');
+
+        state.port = null;
       }
+    }
+  }
+
+  function showTroubleshootBanner(err) {
+    if (!dom.connectionTroubleshootBanner) return;
+    const msg = (err && err.message) ? err.message : 'Unknown error';
+    let detailText = `The browser could not open the selected serial port (${msg}).`;
+
+    if (msg.toLowerCase().includes('failed to open') || err.name === 'NetworkError') {
+      detailText = `Port Access Denied: The COM port is locked by another program (most commonly the Arduino IDE Serial Monitor or Plotter). Please close the Arduino IDE Serial Monitor completely, then click "Try Connecting Again".`;
+    } else if (err.name === 'InvalidStateError') {
+      detailText = `The serial port is already open or busy. Refresh the page or disconnect any other session before connecting.`;
+    }
+
+    if (dom.troubleshootErrorDetail) {
+      dom.troubleshootErrorDetail.textContent = detailText;
+    }
+    dom.connectionTroubleshootBanner.classList.remove('hidden');
+  }
+
+  async function handleResetEspClick() {
+    if (!state.port) return;
+    try {
+      addEvent('SYSTEM', 'Sending reboot pulse (RTS) to ESP32...', 'warning');
+      if (state.port.setSignals) {
+        await state.port.setSignals({ dataTerminalReady: false, requestToSend: true });
+        await new Promise(r => setTimeout(r, 120));
+        await state.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+        addEvent('SYSTEM', 'ESP32 hardware rebooted via RTS signal.', 'safe');
+      } else {
+        addEvent('SERIAL', 'Hardware signal control not supported by this USB driver.', 'warning');
+      }
+    } catch (e) {
+      console.warn('Could not reset ESP32 via RTS:', e);
+      addEvent('SERIAL', `Reset signal failed: ${e.message}`, 'warning');
     }
   }
 
@@ -271,6 +355,7 @@
     setConnectionUI('DISCONNECTED', 'DISCONNECTED');
     dom.connectBtn.disabled = false;
     dom.disconnectBtn.disabled = true;
+    if (dom.resetEspBtn) dom.resetEspBtn.disabled = true;
     dom.startTransmissionBtn.disabled = true;
     dom.stopTransmissionBtn.disabled = true;
 
@@ -336,22 +421,28 @@
   // Parse and Route Incoming Newline-Delimited JSON Messages
   // --------------------------------------------------------------------------
   function processIncomingLine(line) {
+    const rawClean = line.replace(/[\r\n]/g, '').trim();
+    if (rawClean.length === 0) return;
+
+    // Any non-empty line received proves the serial physical link is receiving bytes
+    state.lastPacketTimestamp = Date.now();
+    if (state.isDataStale) {
+      state.isDataStale = false;
+      addEvent('SYSTEM', 'Sensor data stream restored.', 'safe');
+    }
+
     let packet;
     try {
-      packet = JSON.parse(line);
+      packet = JSON.parse(rawClean);
     } catch (err) {
-      // Ignore malformed serial lines (e.g. bootloader noise or partial fragments)
+      // Non-JSON line: captures ESP32 boot messages or raw prints in the event log
+      addEvent('RAW SERIAL', rawClean.slice(0, 80), 'info');
       return;
     }
 
     if (!packet || typeof packet !== 'object') return;
 
     if (packet.type === 'sensor') {
-      state.lastPacketTimestamp = Date.now();
-      if (state.isDataStale) {
-        state.isDataStale = false;
-        addEvent('SYSTEM', 'Sensor data stream restored.', 'safe');
-      }
       handleSensorTelemetry(packet);
     } else if (packet.type === 'ack') {
       handleCommandAcknowledgement(packet);

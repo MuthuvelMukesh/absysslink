@@ -100,6 +100,7 @@ void sendAck(const char* cmd, bool success, bool transmissionState);
 // ----------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
+  delay(300); // Allow USB-UART bridge to stabilize upon host connection
 
   // Configure GPIO directions
   pinMode(PIN_LASER, OUTPUT);
@@ -117,6 +118,11 @@ void setup() {
   isTransmissionActive = false;
   laserPinState = false;
   buzzerPhysicalState = false;
+
+  // Immediately broadcast initial state upon startup so web dashboard connects instantly
+  updateSensorLogic();
+  sendTelemetry();
+  Serial.flush();
 }
 
 // ----------------------------------------------------------------------------
@@ -144,6 +150,7 @@ void loop() {
   if (now - lastTelemetryTime >= TELEMETRY_INTERVAL_MS) {
     lastTelemetryTime = now;
     sendTelemetry();
+    Serial.flush();
   }
 }
 
